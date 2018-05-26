@@ -1,35 +1,127 @@
-
 ## Overview ##
 
-`lightd` runs as a service on your Raspberry Pi and lets you control the connected LED strips based on commands it receives from the network. There's a simple python script you can run anywhere on the same network.
+The goal of Fibre is to provide a framework to make suckless distributed applications easier to program.
 
-The LED control is based on [rpi_ws281x](https://github.com/jgarff/rpi_ws281x). The supported LEDs include any RGB and RGBW LED strips that speak the protocol of the WS281x or SK6812 LEDs. The supported interfaces are PWM, PCM and SPI.
+In particular:
 
-The network connectivity is based on [Fibre](https://github.com/samuelsadok/fibre). In the future this means easy zero-config control from most OSses using your language of choice.
+ - Nobody likes boiler plate code. Using a remote object should feel almost
+   exactly as if it was local. No matter if it's in a different process, on
+   a USB device, connected via Bluetooth, over the Internet or all at the
+   same time.
+   All complexity arising from the system being distributed should be taken
+   care of by Fibre while still allowing the application developer to easily
+   fine-tune things.
 
-Note that this project is in an alpha stage and while basic control is working it will undergo breaking changes.
+ - Fibre has the ambition to run on most major platforms and provide bindings
+   for the most popular languages. Even bare metal embedded systems with very
+   limited resources. See the Compatibility section for the current status.
 
-## Quick Start Guide ##
+ - Once you deployed your application and want to change the interface, don't
+   worry about breaking other applications. With Fibre's object model, the
+   most common updates like adding methods, properties or arguments won't
+   break anything. Sometimes you can get away with removing methods if they
+   weren't used by other programs. **This is not implemented yet.**
 
-### Configuration ###
- - Adapt the LED-driver configuration in `lightd.cpp`, around lines 12 to 43.
- - Set the correct IP address or hostname in `lightctl.py`
+## Current Status ##
 
-### Compilation ###
-First, you need a compiler (obviously). If you're cross-compiling from your standard x86 PC for the Raspberry Pi, install the `arm-linux-gnueabihf-gcc` toolchain. Otherwise you can compile directly on the RPi using its native compiler. Either way, make sure the value of `TOOLCHAIN` in `Tupfile.lua` is correct.
-Next you need the `tup` build system (why another niche build system? because this one is logically sound, that's a big plus). Now just run `tup init` and `tup` in the top level directory of the repo.
+The project is in an early stage and the focus so far was to get a minimum working implementation.
 
-### Installation ###
-On your Raspberry Pi (or whatever you connect the LEDs to):
+* **C++**: Currently only supports the server side (i.e. publishing local objects). The C++ library comes with builtin support for TCP and UDP transport layers on Posix platforms. The library can easily be used with user provided transport layers.
 
-    sudo ./install.sh
-    sudo systemctl enable lightd
-    sudo systemctl start lightd
-    sudo systemctl enable lights-off.timer
-    sudo systemctl start lights-off.timer
+* **Python**: Currently only supports the client side (i.e. using remote objects). The Python library comes with builtin support for TCP, UDP, USB and UART transport layers.
 
-The last two commands will also make your lights turn red and then off every day at midnight.
+Support for more languages (most importantly JavaScript) will be added once the protocol matures. Feel free to add your contribution.
 
-### Usage ###
+## Show me some code
 
-    `lightctl.py`
+Consider this program:
+
+```
+class TestClass {
+public:
+    float property1;
+    float property2;
+
+    float set_both(float arg1, float arg2) {
+        property1 = arg1;
+        property2 = arg2;
+        return property1 + property2;
+    }
+};
+
+
+int main() {
+    TestClass test_object = TestClass();
+
+    while (1) {
+        printf("test_object.property1: %f\n", test_object.property1);
+        usleep(1000000 / 5); // 5 Hz
+    }
+}
+```
+
+Say you want to publish `test_object` so that a remote Fibre node can use it.
+
+1. Add includes
+      ```C++
+      #include <fibre/protocol.hpp>
+      #include <fibre/posix_tcp.hpp>
+      ```
+1. Add Fibre export definitions to the exported class
+      ```C++
+      class TestClass {
+            [...]
+            FIBRE_EXPORTS(TestClass,
+                  make_protocol_property("property1", &property1),
+                  make_protocol_property("property2", &property2),
+                  make_protocol_function("set_both", *obj, &TestClass::set_both, "arg1", "arg2")
+            );
+      };
+      ```
+   Note: in the future this will be generated from a YAML file using automatic code generation.
+
+1. Publish the object on Fibre
+      ```C++
+      auto definitions = test_object.fibre_definitions;
+      fibre_publish(definitions);
+      ```
+   Note: currently you must publish all objects at once. This will be fixed in the future.
+
+1. Start the TCP server
+      ```C++
+      std::thread server_thread_tcp(serve_on_tcp, 9910);
+      ```
+      Note: this step will be replaced by a simple `fibre_start()` call in the future. All builtin transport layers then will be started automatically.
+
+## Adding Fibre to your project ##
+
+We recommend Git subtrees if you want to include the Fibre source code in another project.
+Other contributors don't need to know anything about subtrees, to them the Fibre repo will be like any other normal directory.
+
+#### Adding the repo
+```
+git remote add fibre-origin git@github.com:samuelsadok/fibre.git
+git fetch fibre-origin
+git subtree add --prefix=fibre --squash fibre-origin master
+```
+Instead of using the upstream remote, you might want to use your own fork for greater flexibility.
+
+#### Pulling updates from upstream
+```
+git subtree pull --prefix=fibre --squash fibre-origin master
+```
+
+#### Contributing changes back to upstream
+This requires push access to `fibre-origin`.
+```
+git subtree push --prefix=fibre fibre-origin master
+```
+
+## Projects using Fibre ##
+
+ - [ODrive](https://github.com/madcowswe/ODrive): High performance motor control
+ - [lightd](https://github.com/samuelsadok/lightd): Service that can be run on a Raspberry Pi (or similar) to control RGB LED strips
+
+## Contribute ##
+
+This project losely adheres to the [Google C++ Style Guide](https://google.github.io/styleguide/cppguide.html).
