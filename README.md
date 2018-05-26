@@ -1,89 +1,35 @@
+
 ## Overview ##
 
-The goal of Fibre is to provide a framework to make suckless distributed applications easier to program.
+`lightd` runs as a service on your Raspberry Pi and lets you control the connected LED strips based on commands it receives from the network. There's a simple python script you can run anywhere on the same network.
 
-In particular:
+The LED control is based on [rpi_ws281x](https://github.com/jgarff/rpi_ws281x). The supported LEDs include any RGB and RGBW LED strips that speak the protocol of the WS281x or SK6812 LEDs. The supported interfaces are PWM, PCM and SPI.
 
- - Nobody likes boiler plate code. Using a remote object should feel almost
-   exactly as if it was local. No matter if it's in a different process, on
-   a USB device, connected via bluetooth, over the internet or all at the
-   same time.
-   All complexity arising from the system being distributed should be taken
-   care of by Fibre while still allowing the application developer to easily
-   fine-tune things.
+The network connectivity is based on [Fibre](https://github.com/samuelsadok/fibre). In the future this means easy zero-config control from most OSses using your language of choice.
 
- - Fibre has the ambition to run on most major platforms and provide bindings
-   for the most popular languages. Even bare metal embedded systems with very
-   limited resources. See the Compatibility section for the current status.
+Note that this project is in an alpha stage and while basic control is working it will undergo breaking changes.
 
- - Once you deployed your application and want to change the interface, don't
-   worry about breaking other applications. With Fibre's object model, the
-   most common updates like adding methods, properties or arguments won't
-   break anything. Sometimes you can get away with removing methods if they
-   weren't used by other programs.
+## Quick Start Guide ##
 
+### Configuration ###
+ - Adapt the LED-driver configuration in `lightd.cpp`, around lines 12 to 43.
+ - Set the correct IP address or hostname in `lightctl.py`
 
-## Architecture ##
+### Compilation ###
+First, you need a compiler (obviously). If you're cross-compiling from your standard x86 PC for the Raspberry Pi, install the `arm-linux-gnueabihf-gcc` toolchain. Otherwise you can compile directly on the RPi using its native compiler. Either way, make sure the value of `TOOLCHAIN` in `Tupfile.lua` is correct.
+Next you need the `tup` build system (why another niche build system? because this one is logically sound, that's a big plus). Now just run `tup init` and `tup` in the top level directory of the repo.
 
-Note that this is not yet representative for the existing code.
+### Installation ###
+On your Raspberry Pi (or whatever you connect the LEDs to):
 
-```
+    sudo ./install.sh
+    sudo systemctl enable lightd
+    sudo systemctl start lightd
+    sudo systemctl enable lights-off.timer
+    sudo systemctl start lights-off.timer
 
- /--------------\  /--------------\   /---------------------------\
- | Light Toggle |  | Driver for   |   | LED strip -> simple light |
- | Applet       |  | Built-in LED |   | adaptor                   |
- \--------------/  \--------------/   \---------------------------/
-       |                  |                     |
- /-------------------------------------------------------\
- |                   Local Fibre Hub                     |
- \-------------------------------------------------------/
-       |                |
- /-----------\    /-----------\
- | USB relay |    | UDP relay |
- \-----------/    \-----------/
-       |                |
- /---------------\      |
- | fibre-enabled |   /-----------\
- | desk lamp     |   | UDP relay |
- \---------------/   \-----------/
-                        |
-                 /------------------\
-                 | remote fibre hub |
-                 \------------------/
-                        |
-                 /------------------\
-                 | LED strip driver |
-                 \------------------/
+The last two commands will also make your lights turn red and then off every day at midnight.
 
-```
+### Usage ###
 
-
-## Compatibility ##
-
-|                  | Linux |
-|------------------|:-----:|
-| **UDP**          |   yes |
-| **raw TCP**      |   yes |
-| **WebSocks**     |       |
-| **HTTP**         |       |
-| **Bluetooth LE** |       |
-| **USB**          |       |
-| **Serial**       |       |
-| **CAN**          |       |
-| **SPI**          |       |
-| **I2C**          |       |
-
-
-## Projects based on Fibre ##
-
-[lightd](https://github.com/samuelsadok/lightd) Service that can be run on a Raspberry Pi (or similar) to control RGB LED strips
-
-## Roadmap ##
-
-- Add compatibility with Windows, macOS, iOS, Android
-- Add bindings for JavaScript, C#
-- CI to test all items on the feature matrix
-
-## Contribute ##
-
-This project losely adheres to the [Google C++ Style Guide](https://google.github.io/styleguide/cppguide.html).
+    `lightctl.py`
