@@ -6,6 +6,7 @@
 
 #include <fibre/protocol.hpp>
 #include <fibre/posix_tcp.hpp>
+#include <fibre/posix_udp.hpp>
 
 #include "rpi_ws281x/ws2811.h"
 
@@ -119,6 +120,20 @@ public:
         }
     }
 
+    void set_color(float white, float red, float green, float blue, float duration, bool limit_brightness) {
+        printf("set_color\n");
+        start_fade((rgbw_t){
+            .w = white,
+            .r = red,
+            .g = green,
+            .b = blue
+        }, duration, limit_brightness);
+    }
+
+    FIBRE_EXPORTS(LEDController,
+        make_protocol_function("set_color", *obj, &LEDController::set_color, "white", "red", "green", "blue", "duration", "limit_brightness")
+    );
+
 private:
     void render() {
         struct timespec currenttime;
@@ -154,67 +169,20 @@ LEDController<LEDSTRIP2_LENGTH> controller2;
 
 
 
-/* Fibre endpoint definitions ------------------------------------------------*/
-// TODO: This whole section is horrible boilerplate code. Autogenerate it.
-
-
-struct set_color_args {
-    rgbw_t color;
-    float duration;
-    uint8_t limit_brightness;
-} set_color_args;
-
-void ledstrip1_set_color(void) {
-    printf("ledstrip1.set_color\n");
-    controller1.start_fade(set_color_args.color,
-            set_color_args.duration,
-            set_color_args.limit_brightness);
-}
-void ledstrip2_set_color(void) {
-    printf("ledstrip2.set_color\n");
-    controller2.start_fade(set_color_args.color,
-            set_color_args.duration,
-            set_color_args.limit_brightness);
-}
-void both_set_color(void) {
-    printf("both_set_color.set_color\n");
-    ledstrip1_set_color();
-    ledstrip2_set_color();
-}
-
-const Endpoint endpoints[] = {
-    Endpoint::make_function("set_color", both_set_color),
-        Endpoint::make_property("white", &set_color_args.color.w),
-        Endpoint::make_property("red", &set_color_args.color.r),
-        Endpoint::make_property("green", &set_color_args.color.g),
-        Endpoint::make_property("blue", &set_color_args.color.b),
-        Endpoint::make_property("duration", &set_color_args.duration),
-        Endpoint::make_property("limit_brightness", &set_color_args.limit_brightness),
-    Endpoint::close_tree(),
-    Endpoint::make_object("ledstrip1"),
-        Endpoint::make_function("set_color", ledstrip1_set_color),
-            Endpoint::make_property("white", &set_color_args.color.w),
-            Endpoint::make_property("red", &set_color_args.color.r),
-            Endpoint::make_property("green", &set_color_args.color.g),
-            Endpoint::make_property("blue", &set_color_args.color.b),
-            Endpoint::make_property("duration", &set_color_args.duration),
-            Endpoint::make_property("limit_brightness", &set_color_args.limit_brightness),
-        Endpoint::close_tree(),
-    Endpoint::close_tree(),
-    Endpoint::make_object("ledstrip2"),
-        Endpoint::make_function("set_color", ledstrip2_set_color),
-            Endpoint::make_property("white", &set_color_args.color.w),
-            Endpoint::make_property("red", &set_color_args.color.r),
-            Endpoint::make_property("green", &set_color_args.color.g),
-            Endpoint::make_property("blue", &set_color_args.color.b),
-            Endpoint::make_property("duration", &set_color_args.duration),
-            Endpoint::make_property("limit_brightness", &set_color_args.limit_brightness),
-        Endpoint::close_tree(),
-    Endpoint::close_tree()
+class RootObject {
+public:
+    void set_color(float white, float red, float green, float blue, float duration, bool limit_brightness) {
+        controller1.set_color(white, red, green, blue, duration, limit_brightness);
+        controller2.set_color(white, red, green, blue, duration, limit_brightness);
+    }
+    FIBRE_EXPORTS(RootObject,
+        make_protocol_function("set_color", *obj, &RootObject::set_color, "white", "red", "green", "blue", "duration", "limit_brightness"),
+        make_protocol_object("ledstrip1", controller1.make_fibre_definitions()),
+        make_protocol_object("ledstrip2", controller2.make_fibre_definitions())
+    );
 };
-constexpr size_t NUM_ENDPOINTS = sizeof(endpoints) / sizeof(endpoints[0]);
 
-/*----------------------------------------------------------------------------*/
+RootObject root_object;
 
 
 
@@ -241,8 +209,12 @@ int main() {
     }
 
     // expose service on Fibre
-    std::thread server_thread(serve_on_tcp, endpoints, NUM_ENDPOINTS, 9910);
+    auto definitions = root_object.fibre_definitions;
+    fibre_publish(definitions);
 
+    // Expose Fibre objects on TCP and UDP
+    std::thread server_thread_tcp(serve_on_tcp, 9910);
+    std::thread server_thread_udp(serve_on_udp, 9910);
     printf("LED server started.\n");
 
     while (running) {

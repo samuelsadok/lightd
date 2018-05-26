@@ -1,4 +1,7 @@
 
+tup.include('fibre/tupfiles/build.lua')
+tup.include('fibre/cpp/package.lua')
+
 CPP_SOURCES = {'lightd.cpp','fibre/cpp/posix_tcp.cpp','fibre/cpp/protocol.cpp'}
 INCLUDE = {'fibre/cpp/include'}
 LIBS = {'pthread', 'rt'}
@@ -9,61 +12,25 @@ TOOLCHAIN = 'arm-linux-gnueabihf-' -- cross-compile
 --TOOLCHAIN = '' -- compile for the current architecture
 
 -- C sources
-C_SOURCES = {
-    'rpi_ws281x/mailbox.c',
-    'rpi_ws281x/ws2811.c',
-    'rpi_ws281x/pwm.c',
-    'rpi_ws281x/pcm.c',
-    'rpi_ws281x/dma.c',
-    'rpi_ws281x/rpihw.c'
+rpi_ws281x_package = define_package{
+    sources={
+        'rpi_ws281x/mailbox.c',
+        'rpi_ws281x/ws2811.c',
+        'rpi_ws281x/pwm.c',
+        'rpi_ws281x/pcm.c',
+        'rpi_ws281x/dma.c',
+        'rpi_ws281x/rpihw.c'
+    }
 }
 
-
--- to cross compile:
---CFLAGS += '-target armv6l-unknown-linux-gnueabihf --sysroot=/usr/arm-linux-gnueabihf'
-
--- Convert includes to CFLAGS
-for _,inc in pairs(INCLUDE) do
-    CFLAGS += "-I"..inc
-end
-
--- Convert libs to LDFLAGS
-for _,lib in pairs(LIBS) do
-    LDFLAGS += "-l"..lib
-end
-
-
-
-
-function compile(compiler, flags, sources)
-    objects = {}
-    for _,src in pairs(sources) do
-        obj="build/"..src:gsub("/","_")..".o"
-        tup.frule{
-            inputs=src,
-            command=compiler..' -c %f '..
-                    tostring(flags)..
-                    ' -o %o',
-            outputs=obj
-        }
-        objects += obj
-    end
-    return objects
-end
-
-c_obj = compile(TOOLCHAIN..'gcc', CFLAGS, C_SOURCES)
-cpp_obj = compile(TOOLCHAIN..'g++ -std=c++11', CFLAGS, CPP_SOURCES)
-
-
-objects = {}
-for _,obj in pairs(c_obj) do objects += obj end
-for _,obj in pairs(cpp_obj) do objects += obj end
-
-tup.frule{
-    inputs=objects,
-    command=TOOLCHAIN..'g++ %f '..
-            tostring(CFLAGS)..' '..
-            tostring(LDFLAGS)..
-            ' -o %o',
-    outputs='build/lightd'
+lightd = define_package{
+    packages={
+        fibre_package,
+        rpi_ws281x_package
+    },
+    sources={'lightd.cpp'}
 }
+
+toolchain=GCCToolchain(TOOLCHAIN, 'build', {'-O3', '-g', '-D_XOPEN_SOURCE=500'}, {})
+build_executable('lightd', lightd, toolchain)
+

@@ -37,7 +37,7 @@ if (args.verbose):
   printer = print
 else:
   printer = lambda x: None
-lightcontroller = fibre.open_tcp(args.host + ':9910', printer=printer, device_stdout=print)
+lightcontroller = fibre.find_any(path=("tcp:" + args.host + ':9910'), timeout=100)
 
 # Set color
 lightcontroller.set_color(float((color >> 24) & 0xff) / 255,
@@ -46,3 +46,5 @@ lightcontroller.set_color(float((color >> 24) & 0xff) / 255,
                           float((color >> 0) & 0xff) / 255,
                           args.time,
                           1 if args.limit_brightness else 0)
+
+lightcontroller._close()
