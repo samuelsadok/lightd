@@ -89,7 +89,51 @@ static float get_timespan(struct timespec *time1, struct timespec *time0) {
     return (float)(time1->tv_sec - time0->tv_sec) + (float)((time1->tv_nsec - time0->tv_nsec) / 1000000ll) / 1e3;
 }
 
+class Animation {
+public:
+    Animation(size_t num_leds, size_t num_frames, float duration, const rgbw_t* data) :
+            num_leds_(num_leds),
+            num_frames_(num_frames),
+            frame_duration_(duration / static_cast<float>(num_frames - 1)),
+            data_(data) {}
 
+    void draw(struct timespec* timestamp, struct timespec* starttime, rgbw_t* output, size_t output_length) {
+        size_t copy_count = std::min(num_leds_, output_length);
+
+        float progress = get_timespan(timestamp, starttime) / frame_duration_;
+        if (static_cast<size_t>(progress) < num_frames_ - 1 // prevent out-of-bounds access
+            && progress < static_cast<float>(num_frames_ - 1)) { // evaluates to false for inf and NaN
+            size_t frame_num = static_cast<size_t>(progress); // [0, num_frames)
+            progress -= frame_num; // [0, 1)
+            const rgbw_t* frame1 = &data_[frame_num * num_leds_];
+            const rgbw_t* frame2 = &data_[(frame_num + 1) * num_leds_];
+            for (size_t i = 0; i < copy_count; ++i)
+                output[i] = rgbw_blend(frame1[i], frame2[i], progress);
+        } else {
+            memcpy(output, &data_[(num_frames_ - 1) * num_leds_], sizeof(rgbw_t) * copy_count);
+        }
+    }
+
+private:
+    size_t num_leds_;
+    size_t num_frames_;
+    float frame_duration_; // [s]
+    const rgbw_t* data_;
+};
+
+template<unsigned COUNT>
+class FadeToColorAnimation : public Animation {
+public:
+    FadeToColorAnimation(const rgbw_t* current, size_t num_leds, rgbw_t target, float duration, bool should_limit_brightness)
+        : Animation(num_leds, 2, duration, reinterpret_cast<const rgbw_t*>(start_and_end)) {
+        size_t count = std::min(num_leds, COUNT);
+        for (size_t i = 0; i < count; ++i) {
+            start_and_end[0][i] = current[i];
+            start_and_end[1][i] = should_limit_brightness ? limit_brightness(target, current[i]) : target;
+        }
+    }
+    rgbw_t start_and_end[2][COUNT];
+};
 
 template<unsigned COUNT>
 class LEDController {
@@ -99,16 +143,15 @@ public:
 
     void start_fade(rgbw_t target, float duration, bool should_limit_brightness = 0) {
         // TODO: thread safety
-        if (clock_gettime(CLOCK_MONOTONIC, &fade_start_)) {
+        if (clock_gettime(CLOCK_MONOTONIC, &animation_start_)) {
             fprintf(stderr, "clock failed\n");
             return;
         }
-        fade_duration_ = duration;
 
-        for (size_t i = 0; i < COUNT; ++i) {
-            img_end_[i] = should_limit_brightness ? limit_brightness(target, img_current_[i]) : target;
-            img_start_[i] = img_current_[i];
-        }
+        animation_ = std::make_shared<FadeToColorAnimation<COUNT>>(
+            img_current_, COUNT,
+            target, duration, should_limit_brightness
+        );
     }
 
     void render(ws2811_led_t *leds) {
@@ -142,22 +185,17 @@ private:
             return;
         }
 
-        float progress = get_timespan(&currenttime, &fade_start_) / fade_duration_;
-        if (!(progress < 1)) // also evaluates to true for inf and NaN
-            progress = 1;
-        for (size_t i = 0; i < COUNT; ++i)
-            img_current_[i] = rgbw_blend(img_start_[i], img_end_[i], progress);
+        if (animation_)
+            animation_->draw(&currenttime, &animation_start_, img_current_, COUNT);
     }
 
     static uint8_t to_uint8(float val) {
         return (val <= 0) ? 0 : (val >= 1) ? 255 : static_cast<uint8_t>(val * 255.f);
     }
 
+    std::shared_ptr<Animation> animation_ = nullptr;
+    struct timespec animation_start_; // time when the animation started
     rgbw_t img_current_[COUNT]; // 1-D image representing the current LED colors
-    rgbw_t img_start_[COUNT];    // 1-D image at the beginning of the current animation
-    rgbw_t img_end_[COUNT];      // 1-D image at the end of the current animation
-    struct timespec fade_start_; // time when the fade started
-    float fade_duration_;        // duration of the fade (can be 0, in which case the img_end is displayed)
 };
 
 
