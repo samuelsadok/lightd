@@ -4,7 +4,7 @@
 #include <thread>
 #include <signal.h>
 
-#include <fibre/protocol.hpp>
+#include <fibre/fibre.hpp>
 #include <fibre/posix_tcp.hpp>
 #include <fibre/posix_udp.hpp>
 
@@ -174,7 +174,8 @@ public:
     }
 
     FIBRE_EXPORTS(LEDController,
-        make_protocol_function("set_color", *obj, &LEDController::set_color, "white", "red", "green", "blue", "duration", "limit_brightness")
+        //make_fibre_function("start_music", *obj, &LEDController::start_music),
+        make_fibre_function("set_color", *obj, &LEDController::set_color, "white", "red", "green", "blue", "duration", "limit_brightness")
     );
 
 private:
@@ -214,9 +215,9 @@ public:
         controller2.set_color(white, red, green, blue, duration, limit_brightness);
     }
     FIBRE_EXPORTS(RootObject,
-        make_protocol_function("set_color", *obj, &RootObject::set_color, "white", "red", "green", "blue", "duration", "limit_brightness"),
-        make_protocol_object("ledstrip1", controller1.make_fibre_definitions()),
-        make_protocol_object("ledstrip2", controller2.make_fibre_definitions())
+        make_fibre_function("set_color", *obj, &RootObject::set_color, "white", "red", "green", "blue", "duration", "limit_brightness"),
+        make_fibre_object("ledstrip1", controller1.make_fibre_definitions()),
+        make_fibre_object("ledstrip2", controller2.make_fibre_definitions())
     );
 };
 
