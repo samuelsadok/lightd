@@ -4,6 +4,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <unistd.h>
+#include <fcntl.h>
 #include <thread>
 #include <future>
 #include <vector>
@@ -32,6 +33,26 @@ private:
     int socket_fd_;
 };
 
+// source: https://stackoverflow.com/questions/2149798/how-to-reset-a-socket-back-to-blocking-mode-after-i-set-it-to-nonblocking-mode
+bool set_blocking_mode(const int &socket, bool is_blocking)
+{
+    bool ret = true;
+
+#ifdef WIN32
+    /// @note windows sockets are created in blocking mode by default
+    // currently on windows, there is no easy way to obtain the socket's current blocking mode since WSAIsBlocking was deprecated
+    u_long non_blocking = is_blocking ? 0 : 1;
+    ret = NO_ERROR == ioctlsocket(socket, FIONBIO, &non_blocking);
+#else
+    const int flags = fcntl(socket, F_GETFL, 0);
+    if ((flags & O_NONBLOCK) && !is_blocking) { /*info("set_blocking_mode(): socket was already in non-blocking mode"); */ return ret; }
+    if (!(flags & O_NONBLOCK) && is_blocking) { /*info("set_blocking_mode(): socket was already in blocking mode"); */ return ret; }
+    ret = 0 == fcntl(socket, F_SETFL, is_blocking ? flags ^ O_NONBLOCK : flags | O_NONBLOCK);
+#endif
+
+    return ret;
+}
+
 
 int serve_client(int sock_fd) {
     uint8_t buf[TCP_RX_BUF_LEN];
@@ -52,6 +73,7 @@ int serve_client(int sock_fd) {
         // -1 indicates error and 0 means that the client gracefully terminated
         if (n_received == -1 || n_received == 0) {
             close(sock_fd);
+            printf("closing TCP socket");
             return n_received;
         }
 
@@ -93,6 +115,7 @@ int serve_on_tcp(unsigned int port) {
         socklen_t silen = sizeof(si_other);
         // TODO: Add a limit on accepting connections
         int client_portal_fd = accept(s, reinterpret_cast<sockaddr *>(&si_other), &silen); // blocking call
+        set_blocking_mode(client_portal_fd, 1);
         serv_pool.push_back(std::async(std::launch::async, serve_client, client_portal_fd));
         // do a little clean up on the pool
         for (std::vector<std::future<int>>::iterator it = serv_pool.end()-1; it >= serv_pool.begin(); --it) {
