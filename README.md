@@ -17,7 +17,7 @@ Note that this project is in an alpha stage and while basic control is working i
 
 ### Compilation ###
 First, you need a compiler (obviously). If you're cross-compiling from your standard x86 PC for the Raspberry Pi, install the `arm-linux-gnueabihf-gcc` toolchain. Otherwise you can compile directly on the RPi using its native compiler. Either way, make sure the value of `TOOLCHAIN` in `Tupfile.lua` is correct.
-Next you need the `tup` build system (why another niche build system? because this one is logically sound, that's a big plus). Now just run `tup init` and `tup` in the top level directory of the repo.
+Next you need the `tup` build tool (why another niche build system? because this one is logically sound, that's a big plus). Now just run `tup init` and `tup` in the top level directory of the repo.
 
 ### Installation ###
 On your Raspberry Pi (or whatever you connect the LEDs to):
@@ -30,6 +30,17 @@ On your Raspberry Pi (or whatever you connect the LEDs to):
 
 The last two commands will also make your lights turn red and then off every day at midnight.
 
+
+### HomeKit Support ###
+
+To control the lights from Apple HomeKit, run
+
+    pip3 install HAP-python[QRCode]
+    sudo systemctl enable lightd-homekit
+    sudo systemctl start lightd-homekit
+    sudo journalctl -u HAP-python # to see the log which includes the QR-code
+
 ### Usage ###
 
-    `lightctl.py`
+  * Fade to warm white within 1 second: `lightctl 12ff4a00 --time 1`
+  * More info: `lightctl --help`

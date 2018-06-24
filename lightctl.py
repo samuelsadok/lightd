@@ -22,7 +22,7 @@ parser.add_argument("-t", "--time", metavar="SECONDS", type=float,
                     help="Fade duration. Defaults to 0.")
 parser.add_argument("-l", "--limit-brightness", action="store_true",
                     help="don't increase brightness")
-parser.set_defaults(host="192.168.178.36", time=0)
+parser.set_defaults(host="tcp:192.168.178.36:9910", time=0)
 args = parser.parse_args()
 
 try:
@@ -37,7 +37,7 @@ if (args.verbose):
   printer = print
 else:
   printer = lambda x: None
-lightcontroller = fibre.find_any(path=("tcp:" + args.host + ':9910'), timeout=100)
+lightcontroller = fibre.find_any(path=(args.host), timeout=100)
 
 # Set color
 lightcontroller.set_color(float((color >> 24) & 0xff) / 255,
@@ -47,4 +47,6 @@ lightcontroller.set_color(float((color >> 24) & 0xff) / 255,
                           args.time,
                           1 if args.limit_brightness else 0)
 
+#lightcontroller.ledstrip1.start_music()
 lightcontroller._close()
+#import ipdb; ipdb.set_trace()

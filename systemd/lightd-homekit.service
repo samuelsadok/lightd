@@ -1,0 +1,12 @@
+[Unit]
+Description=LED Strip Homekit relay
+Wants=lightd.service
+After=local-fs.target network-online.target lightd.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/lightd-homekit
+
+[Install]
+WantedBy=multi-user.target
+

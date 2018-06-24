@@ -2,6 +2,7 @@
 set -euo pipefail
 
 ln -sf "$(realpath lightctl.py)" /usr/bin/lightctl
+ln -sf "$(realpath lightd_homekit.py)" /usr/bin/lightd-homekit
 cp systemd/* /etc/systemd/system/
 
 #sudo systemctl stop lightd
