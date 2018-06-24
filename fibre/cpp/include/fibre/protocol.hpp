@@ -350,9 +350,9 @@ public:
         output_(output)
     { }
 
-    size_t get_mtu() {
-        return SIZE_MAX;
-    }
+    //size_t get_mtu() {
+    //    return SIZE_MAX;
+    //}
     int process_packet(const uint8_t* buffer, size_t length);
 private:
     PacketSink& output_;
@@ -371,13 +371,38 @@ private:
 template<typename T>
 struct format_traits_t;
 
-template<> struct format_traits_t<float> { static constexpr const char * fmt = "%f"; };
-template<> struct format_traits_t<int32_t> { static constexpr const char * fmt = "%ld"; };
-template<> struct format_traits_t<uint32_t> { static constexpr const char * fmt = "%lu"; };
+template<> struct format_traits_t<float> { using type = void;
+    static constexpr const char * fmt = "%f";
+    static constexpr const char * fmtp = "%f";
+};
+template<> struct format_traits_t<int32_t> { using type = void;
+    static constexpr const char * fmt = "%ld";
+    static constexpr const char * fmtp = "%ld";
+};
+template<> struct format_traits_t<uint32_t> { using type = void;
+    static constexpr const char * fmt = "%lu";
+    static constexpr const char * fmtp = "%lu";
+};
+template<> struct format_traits_t<int16_t> { using type = void;
+    static constexpr const char * fmt = "%hd";
+    static constexpr const char * fmtp = "%hd";
+};
+template<> struct format_traits_t<uint16_t> { using type = void;
+    static constexpr const char * fmt = "%hu";
+    static constexpr const char * fmtp = "%hu";
+};
+template<> struct format_traits_t<int8_t> { using type = void;
+    static constexpr const char * fmt = "%hhd";
+    static constexpr const char * fmtp = "%d";
+};
+template<> struct format_traits_t<uint8_t> { using type = void;
+    static constexpr const char * fmt = "%hhu";
+    static constexpr const char * fmtp = "%u";
+};
 
-template<typename T, typename = typename format_traits_t<T>::fmt>
+template<typename T, typename = typename format_traits_t<T>::type>
 static bool to_string(const T& value, char * buffer, size_t length, int) {
-    snprintf(buffer, length, format_traits_t<T>::fmt, value);
+    snprintf(buffer, length, format_traits_t<T>::fmtp, value);
     return true;
 }
 template<typename T>
@@ -392,7 +417,7 @@ static bool to_string(const T& value, char * buffer, size_t length, ...) {
     return false;
 }
 
-template<typename T, typename = typename format_traits_t<T>::fmt>
+template<typename T, typename = typename format_traits_t<T>::type>
 static bool from_string(const char * buffer, size_t length, T* property, int) {
     return sscanf(buffer, format_traits_t<T>::fmt, property) == 1;
 }
@@ -851,8 +876,6 @@ extern uint16_t json_crc_;
 extern JSONDescriptorEndpoint json_file_endpoint_;
 extern EndpointProvider* application_endpoints_;
 
-//extern std::vector<fibre::FibreRefType> ref_types_;
-
 // @brief Registers the specified application object list using the provided endpoint table.
 // This function should only be called once during the lifetime of the application. TODO: fix this.
 // @param application_objects The application objects to be registred.
@@ -861,8 +884,6 @@ int fibre_publish(T& application_objects) {
     static constexpr size_t endpoint_list_size = 1 + T::endpoint_count;
     static Endpoint* endpoint_list[endpoint_list_size];
     static auto endpoint_provider = EndpointProvider_from_MemberList<T>(application_objects);
-
-    //ref_types_.push_back(fibre::global_instance_of<T>());
 
     json_file_endpoint_.register_endpoints(endpoint_list, 0, endpoint_list_size);
     application_objects.register_endpoints(endpoint_list, 1, endpoint_list_size);

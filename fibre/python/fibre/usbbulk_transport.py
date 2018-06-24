@@ -48,20 +48,29 @@ class USBBulkTransport(fibre.protocol.PacketSource, fibre.protocol.PacketSink):
     if platform.system() != 'Windows':
         self.dev.reset()
 
-    interface_number = 1
+    #self.dev.set_configuration() # no args: set first configuration
+
+    # Find the best interface
+    self.cfg = self.dev.get_active_configuration()
+    custom_interfaces = [i for i in self.cfg.interfaces() if i.bInterfaceClass == 0x00 and i.bInterfaceSubClass == 0x01]
+    cdc_interfaces = [i for i in self.cfg.interfaces() if i.bInterfaceClass == 0x0a and i.bInterfaceSubClass == 0x00]
+    all_compatible_interfaces = custom_interfaces + cdc_interfaces
+    if len(all_compatible_interfaces) == 0:
+      raise Exception("the device has no compatible interfaces")
+    self.intf = all_compatible_interfaces[0]
+
+    # Try to detach kernel driver from interface
     try:
-      if self.dev.is_kernel_driver_active(interface_number):
-        self.dev.detach_kernel_driver(interface_number)
+      if self.dev.is_kernel_driver_active(self.intf.bInterfaceNumber):
+        self.dev.detach_kernel_driver(self.intf.bInterfaceNumber)
         self._logger.debug("Detached Kernel Driver")
+      else:
+        self._logger.debug("Kernel Driver was not attached")
     except NotImplementedError:
       pass #is_kernel_driver_active not implemented on Windows
 
-    self.dev.set_configuration() # no args: set first configuration
-    self.cfg = self.dev.get_active_configuration()
-    self.intf = self.cfg[(1,0)] # this implicitly claims the interface
-    # write endpoint
+    # find write endpoint (first OUT endpoint)
     self.epw = usb.util.find_descriptor(self.intf,
-        # match the first OUT endpoint
         custom_match = \
         lambda e: \
             usb.util.endpoint_direction(e.bEndpointAddress) == \
@@ -69,9 +78,8 @@ class USBBulkTransport(fibre.protocol.PacketSource, fibre.protocol.PacketSink):
     )
     assert self.epw is not None
     self._logger.debug("EndpointAddress for writing {}".format(self.epw.bEndpointAddress))
-    # read endpoint
+    # find read endpoint (first IN endpoint)
     self.epr = usb.util.find_descriptor(self.intf,
-        # match the first IN endpoint
         custom_match = \
         lambda e: \
             usb.util.endpoint_direction(e.bEndpointAddress) == \
@@ -94,11 +102,13 @@ class USBBulkTransport(fibre.protocol.PacketSource, fibre.protocol.PacketSink):
     except usb.core.USBError as ex:
       if ex.errno == 19 or ex.errno == 32: # "no such device", "pipe error"
         raise fibre.protocol.ChannelBrokenException()
-      elif ex.errno == 110: # timeout
+      elif ex.errno is None or ex.errno == 60 or ex.errno == 110: # timeout
         raise TimeoutError()
       else:
+        self._logger.debug("error in usbbulk_transport.py, process_packet")
         self._logger.debug(traceback.format_exc())
         self._logger.debug("halt condition: {}".format(ex.errno))
+        self._logger.debug(str(ex))
         # Try resetting halt/stall condition
         try:
           self.deinit()
@@ -121,11 +131,13 @@ class USBBulkTransport(fibre.protocol.PacketSource, fibre.protocol.PacketSink):
     except usb.core.USBError as ex:
       if ex.errno == 19 or ex.errno == 32: # "no such device", "pipe error"
         raise fibre.protocol.ChannelBrokenException()
-      elif ex.errno is None or ex.errno == 110: # timeout
+      elif ex.errno is None or ex.errno == 60 or ex.errno == 110: # timeout
         raise TimeoutError()
       else:
+        self._logger.debug("error in usbbulk_transport.py, process_packet")
         self._logger.debug(traceback.format_exc())
         self._logger.debug("halt condition: {}".format(ex.errno))
+        self._logger.debug(str(ex))
         # Try resetting halt/stall condition
         try:
           self.deinit()
@@ -158,20 +170,23 @@ def discover_channels(path, serial_number, callback, cancellation_token, channel
   known_devices = []
   def device_matcher(device):
     #print("  test {:04X}:{:04X}".format(device.idVendor, device.idProduct))
-    if (device.bus, device.address) in known_devices:
-      return False
-    if bus != None and device.bus != bus:
-      return False
-    if address != None and device.address != address:
-      return False
-    if serial_number != None and device.serial_number != serial_number:
-      return False
-    if (device.idVendor, device.idProduct) not in WELL_KNOWN_VID_PID_PAIRS:
+    try:
+      if (device.bus, device.address) in known_devices:
+        return False
+      if bus != None and device.bus != bus:
+        return False
+      if address != None and device.address != address:
+        return False
+      if serial_number != None and device.serial_number != serial_number:
+        return False
+      if (device.idVendor, device.idProduct) not in WELL_KNOWN_VID_PID_PAIRS:
+        return False
+    except:
       return False
     return True
 
   while not cancellation_token.is_set():
-    # logger.debug("USB discover loop")
+    logger.debug("USB discover loop")
     devices = usb.core.find(find_all=True, custom_match=device_matcher)
     for usb_device in devices:
       try:

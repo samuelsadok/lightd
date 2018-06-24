@@ -17,8 +17,13 @@ except ModuleNotFoundError:
     sys.stdout.flush()
     pass
 
-## Threading utils ##
+def get_serial_number_str(device):
+    if hasattr(device, 'serial_number'):
+        return format(device.serial_number, 'x').upper()
+    else:
+        return "[unknown serial number]"
 
+## Threading utils ##
 class Event():
     """
     Alternative to threading.Event(), enhanced by the subscribe() function
@@ -214,6 +219,8 @@ class Logger():
     def success(self, text):
         self.print_colored(self._prefix + text, Logger.COLOR_GREEN)
     def info(self, text):
+        self.print_colored(self._prefix + text, Logger.COLOR_DEFAULT)
+    def notify(self, text):
         self.print_colored(self._prefix + text, Logger.COLOR_CYAN)
     def warn(self, text):
         self.print_colored(self._prefix + text, Logger.COLOR_YELLOW)

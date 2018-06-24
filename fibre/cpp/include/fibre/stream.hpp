@@ -15,7 +15,7 @@ public:
     // @brief Get the maximum packet length (aka maximum transmission unit)
     // A packet size shall take no action and return an error code if the
     // caller attempts to send an oversized packet.
-    virtual size_t get_mtu() = 0;
+    //virtual size_t get_mtu() = 0;
 
     // @brief Processes a packet.
     // The blocking behavior shall depend on the thread-local deadline_ms variable.
@@ -104,7 +104,7 @@ public:
     int process_bytes(const uint8_t* buffer, size_t length, size_t* processed_bytes) {
         // Loop to ensure all bytes get sent
         while (length) {
-            size_t chunk = length < _packet_sink.get_mtu() ? length : _packet_sink.get_mtu();
+            size_t chunk = length; // < _packet_sink.get_mtu() ? length : _packet_sink.get_mtu();
             // send chunk as packet
             if (_packet_sink.process_packet(buffer, chunk))
                 return -1;
